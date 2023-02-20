@@ -2,78 +2,92 @@
 
 using Spectre.Console;
 using System.Collections.Concurrent;
+using System.Text.RegularExpressions;
+using System.Threading;
+using TdLib;
+using ReadLineReboot;
 
 namespace TelegramShellClient
 {
-    //Класс отвечающий за предоставление доступа к исполнению любой функции содержащий ввод/вывод
+    //Класс отвечающий за предоставление доступа к исполнению любого метода консоли
     //предоставление доступа осуществляется на основе приоритета
     //более высокий приоритет над текущим - захват доступа выполниться принудительно сразу же после завершения текущей операции
     //одинаковый или более низкий приоритет - захват доступа выполниться после освобождения текущим захватчиком
     internal static class DialogMediator
     {
         
-        private static readonly object сaptureRequest = new object();
+        private static readonly object _capture = new object();
+
+        private static readonly object _console = new object();
 
         private static readonly SemaphoreSlim CaptureAvailible = new SemaphoreSlim(0, 1);
 
         public static Dialog? currentOwner { get; private set; } = null;
 
-        static public bool tryCapture(Dialog capturing)
+        static DialogMediator()
         {
-            lock (сaptureRequest)
-            {
-                if (currentOwner == null)
-                {
-                    CaptureAvailible.Wait();
-                    currentOwner = capturing;
-                    return true;
-                }
-                else if (capturing._priority > currentOwner._priority)
-                {
-                    currentOwner.onCaptureLost();
-                    tryFree(currentOwner);
-                    CaptureAvailible.Wait();
-                    currentOwner = capturing;
-                    return true;
-                }
-                else
-                {
-                    return false;
-                }
-            }
+            ReadLine.Interruptible = true;
+            ReadLine.InterruptionResponsiveness = 64;
+            ReadLine.HistoryEnabled = true;
+            ReadLine.CtrlCEnabled = true;
         }
 
-        static public async Task Capture(Dialog capturing)
+        public static async Task Capture(Dialog capturing)
         {
-            while (!tryCapture(capturing))
+            while(!tryCapture(capturing))
             {
                 await CaptureAvailible.WaitAsync();
                 CaptureAvailible.Release();
             }
         }
 
-        static public bool tryFree(Dialog owner)
+        public static bool tryCapture(Dialog capturing)
         {
-            lock (сaptureRequest)
+            lock(_capture)
             {
-                if (owner.Equals(currentOwner))
+                if (currentOwner == null)
+                {
+                    currentOwner = capturing;
+                    CaptureAvailible.Wait();
+                    return true;
+                }
+                else if (capturing._priority > currentOwner._priority)
+                {
+                    currentOwner.onCaptureLost();
+                    currentOwner = capturing;
+                    return true;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+        }
+
+        public static bool tryFree(Dialog supposedOwner)
+        {
+            lock (_capture)
+            {
+                if (supposedOwner.Equals(currentOwner))
                 {
                     currentOwner = null;
                     CaptureAvailible.Release();
                     return true;
                 }
-                return false;
+                else
+                {
+                    return false;
+                }
             }
         }
 
-        static public bool tryRead(Dialog requester, out string? input)
+        public static bool tryWriteLine(Dialog supposedOwner, in string line)
         {
-            lock (сaptureRequest)
+            lock (_capture)
             {
-                input = null;
-                if (requester.Equals(currentOwner))
+                if (supposedOwner.Equals(currentOwner))
                 {
-                    input = Console.ReadLine();
+                    writeLine(line);
                     return true;
                 }
                 else
@@ -83,19 +97,37 @@ namespace TelegramShellClient
             }
         }
 
-        static public bool tryWrite(Dialog requester, in string output)
+        public static bool tryReadLine(Dialog supposedOwner, out string? line, in string prompt = "", in string default_text = "")
         {
-            lock (сaptureRequest)
+            lock (_capture)
             {
-                if (requester.Equals(currentOwner))
+
+                if (supposedOwner.Equals(currentOwner))
                 {
-                    Console.WriteLine(output);
+                    line = readLine();
                     return true;
                 }
                 else
                 {
+                    line = null;
                     return false;
                 }
+            }
+        }
+
+        private static string? readLine(in string prompt = "", in string default_text = "")
+        {
+            lock(_console)
+            {
+                return ReadLine.Read(prompt, default_text);
+            }
+        }
+
+        private static void writeLine(in string line)
+        {
+            lock (_console)
+            {
+                Console.WriteLine(line);
             }
         }
     }

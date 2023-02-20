@@ -2,6 +2,7 @@
 using Spectre.Console;
 using System.Globalization;
 using System.Net;
+using System.Runtime.InteropServices;
 using TdLib;
 using TdLib.Bindings;
 using static TdLib.TdApi;
@@ -14,7 +15,7 @@ namespace TelegramShellClient
         private const string LogFile = "TSC.txt";
         private const string DataDir = "Data";
         private const int APP_ID = 0;
-        private const string API_HASH = ;
+        private const string API_HASH = "";
         private const string version = "0.1";
         private static TdLib.TdClient _client = new TdLib.TdClient();
         private static TelegramShellClient.Authorization _authorization = Authorization.getInstance(_client);
@@ -66,27 +67,17 @@ namespace TelegramShellClient
             {
                 if (update is not Update.UpdateChatFilters || sender == null || !sender.Equals(_client))
                 {
-                    return;                                                            
+                    return;
                 }
 
                 filters = ((Update.UpdateChatFilters)update).ChatFilters.ToList();
             }
 
-            
-        }
 
+        }
 
         public static void Main(string[] args)
         {
-
-            _client.GetOptionAsync("version").Wait();
-
-            
-
-            while (true)
-            {
-
-            }
         }
     }
 }
