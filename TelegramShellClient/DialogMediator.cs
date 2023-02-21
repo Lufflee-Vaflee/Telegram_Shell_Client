@@ -1,7 +1,4 @@
-﻿
-
-using Spectre.Console;
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 using System.Threading;
 using TdLib;
@@ -55,6 +52,7 @@ namespace TelegramShellClient
                 {
                     currentOwner.onCaptureLost();
                     currentOwner = capturing;
+                    Console.Clear();
                     return true;
                 }
                 else
@@ -110,6 +108,42 @@ namespace TelegramShellClient
                 else
                 {
                     line = null;
+                    return false;
+                }
+            }
+        }
+
+        public delegate T consoleInteraction<T>();
+        public delegate void consoleInteraction();
+
+        public static bool tryInteract<T>(Dialog supposedOwner, out T? result, consoleInteraction<T> interaction)
+        {
+            lock (_console)
+            {
+                if (supposedOwner.Equals(currentOwner))
+                {
+                    result = interaction();
+                    return true;
+                }
+                else
+                {
+                    result = default(T);
+                    return false;
+                }
+            }
+        }
+
+        public static bool tryInteract(Dialog supposedOwner, consoleInteraction interaction)
+        {
+            lock (_console)
+            {
+                if (supposedOwner.Equals(currentOwner))
+                {
+                    interaction();
+                    return true;
+                }
+                else
+                {
                     return false;
                 }
             }

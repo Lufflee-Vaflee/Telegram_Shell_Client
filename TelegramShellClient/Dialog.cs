@@ -4,6 +4,8 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using ReadLineReboot;
+using ReadLineReboot.Abstractions;
+using static TelegramShellClient.DialogMediator;
 
 namespace TelegramShellClient
 {
@@ -72,18 +74,15 @@ namespace TelegramShellClient
                 return false;
             }
         }
-    }
 
-    internal class SomeDialog : Dialog
-    {
-        SomeDialog(int priority) : base(priority)
+        public bool tryInteract<T>(out T? result, consoleInteraction<T> interaction)
         {
-            
+            return DialogMediator.tryInteract<T>(this, out result, interaction);
         }
 
-        override internal void panic()
+        public bool tryInteract(consoleInteraction interaction)
         {
-            //dont panic
+            return DialogMediator.tryInteract(this, interaction);
         }
     }
 }
