@@ -10,53 +10,49 @@ namespace TelegramShellClient
 {
     //делегирует обработку события обновления в зависимости от его типа
     //следит за исключетильным доступом к обработке конкретного типа обновления
-    internal class Updater
+    internal static partial class Application
     {
-        private readonly TdClient? _client = null;
-        private readonly Dictionary<string, Handler> handlers = new Dictionary<string, Handler>();
-        private static Updater? Instance = null;
-
-        private Updater(TdClient client)
+        internal static class Updater
         {
-            _client = client;
-            _client.UpdateReceived += UpdateHandler;
-        }
+            private static readonly Dictionary<string, Handler> handlers = new Dictionary<string, Handler>();
 
-        public static Updater getInstance(TdClient client)
-        {
-            return Instance == null ? new Updater(client) : Instance;
-        }
-
-        private async void UpdateHandler(object? sender, TdApi.Update update)
-        {
-            if (sender == null || !sender.Equals(_client))
+            static Updater()
             {
-                return;
+                _client.UpdateReceived += UpdateHandler;
             }
 
-            Handler? handler;
-            if (handlers.TryGetValue(update.DataType, out handler))
-            {
-                await handler(update);
-            }
-            else
-            {
-                //Console.WriteLine($"Unregistered update: {update}");
-            }
-        }
 
-        public delegate Task Handler(TdApi.Update update);
+            static private void UpdateHandler(object? sender, TdApi.Update update)
+            {
+                if (sender == null || !sender.Equals(_client))
+                {
+                    return;
+                }
 
-        public bool TryRegistrateHandler(Handler handler, TdApi.Update type)
-        {
-            try
-            {
-                handlers.Add(type.DataType, handler);
-                return true;
+                Handler? handler;
+                if (handlers.TryGetValue(update.DataType, out handler))
+                {
+                    handler(update);
+                }
+                else
+                {
+                    //Console.WriteLine($"Unregistered update: {update}");
+                }
             }
-            catch
+
+            public delegate void Handler(TdApi.Update update);
+
+            static public bool TryRegistrateHandler(Handler handler, TdApi.Update type)
             {
-                return false;
+                try
+                {
+                    handlers.Add(type.DataType, handler);
+                    return true;
+                }
+                catch
+                {
+                    return false;
+                }
             }
         }
     }
