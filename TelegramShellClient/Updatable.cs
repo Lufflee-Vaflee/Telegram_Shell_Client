@@ -9,7 +9,25 @@ namespace TelegramShellClient
 {
     internal class Updatable<State>
     {
-        public State? consisted { get; private set; }
+
+        private State? _state;
+        public State? state
+        {
+            get
+            {
+                lock(updating)
+                {
+                    return _state;
+                }
+            }
+            private set
+            {
+                _state = value;
+            }
+        }
+
+
+        private object updating = new object();
 
         public delegate State unpackState(TdApi.Update update);
 
@@ -30,9 +48,14 @@ namespace TelegramShellClient
 
         private void UpdateHandler(TdApi.Update update)
         {
-            State? old_state = consisted;
-            consisted = unpack(update);
-            Notify?.BeginInvoke(old_state, consisted, null, "hello there");
+            State? old_state;
+            lock (updating)
+            {
+                old_state = _state;
+                state = unpack(update);
+            }
+
+            Notify?.BeginInvoke(old_state, state, null, "hello there");
         }
     }
 }
