@@ -26,6 +26,8 @@ namespace TelegramShellClient
             {
                 throw new UnauthorizedAccessException("Error registrating update handler. UpdateAuthorization state already captured. Cant initialize Authorization class");
             }
+            TdApi.RequestAuthenticationPasswordRecovery
+                _client.exe
         }
 
         public static Authorization getInstance(TdClient client)
@@ -166,7 +168,7 @@ namespace TelegramShellClient
                         Console.WriteLine($"We have send you code via phone call to {info.PhoneNumber}.");
                         break;
                     case AuthenticationCodeType.AuthenticationCodeTypeMissedCall:
-                        Console.WriteLine($"We have send you code by missed call to {info.PhoneNumber}. Enter last 6 digits:");
+                        Console.WriteLine($"We have send you code by missed call to {info.PhoneNumber}. Enter last ? digits:");     //how much digits needed?
                         break;
                     case AuthenticationCodeType.AuthenticationCodeTypeFragment:
                         Console.WriteLine($"We have send you code to your NFT phone number. Check https://fragment.com:");
@@ -202,10 +204,37 @@ namespace TelegramShellClient
             }
         }
 
-        private async Task LogOutAsync()
+        public async Task LogOutAsync()
         {
             await _client.LogOutAsync();
         }
+    }
+
+    internal class newAuthorization : Dialog
+    {
+        private newAuthorization? instance = null;
+
+        resendCode _resend;
+        checkCode _check;
+
+
+        public delegate Task<Ok> resendCode(TdApi.ResendAuthenticationCode code);
+        public delegate Task<Ok> checkCode(TdApi.CheckAuthenticationEmailCode code);
+
+        public newAuthorization(int priority, resendCode resend, checkCode check) : base(priority)
+        {
+            _resend = resend;
+            _check = check;
+            check(new TdApi.ResendAuthenticationCode());
+            
+        }
+
+        internal override void panic()
+        {
+
+        }
+
+
     }
 
 }
