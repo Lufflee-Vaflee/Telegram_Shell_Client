@@ -52,12 +52,12 @@ namespace TelegramShellClient
         {
             IsConsoleOwner = false;
             cache?.Clear();
-            return tryFree(this);
+            return TryFree(this);
         }
 
         internal bool TryWrite(in string Line)
         {
-            return tryWriteLine(this, Line);
+            return TryWriteLine(this, Line);
         }
 
         internal async Task Write(string line)
@@ -95,7 +95,7 @@ namespace TelegramShellClient
 
         internal bool TryInteract<T>(out T? result, consoleInteraction<T> interaction)
         {
-            return tryInteract<T>(this, out result, interaction);
+            return DialogMediator.TryInteract(this, out result, interaction);
         }
 
         internal async Task<T?> Interact<T>(consoleInteraction<T> interaction)
@@ -110,7 +110,7 @@ namespace TelegramShellClient
 
         internal bool TryInteract(consoleInteraction interaction)
         {
-            return DialogMediator.tryInteract(this, interaction);
+            return DialogMediator.TryInteract(this, interaction);
         }
 
         internal async Task Interact(consoleInteraction interaction)

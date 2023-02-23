@@ -13,45 +13,45 @@ namespace TelegramShellClient
     internal static class DialogMediator
     {
         
-        private static readonly object _capture = new object();
+        private static readonly object _capture = new();
 
-        private static readonly object _console = new object();
+        private static readonly object _console = new();
 
-        private static readonly SemaphoreSlim CaptureAvailible = new SemaphoreSlim(0, 1);
+        private static readonly SemaphoreSlim CaptureAvailible = new(0, 1);
 
-        public static Dialog? currentOwner { get; private set; } = null;
+        public static Dialog? CurrentOwner { get; private set; } = null;
 
         static DialogMediator()
         {
-            ReadLine.Interruptible = true;
-            ReadLine.InterruptionResponsiveness = 64;
-            ReadLine.HistoryEnabled = true;
-            ReadLine.CtrlCEnabled = true;
+            ReadLineReboot.ReadLine.Interruptible = true;
+            ReadLineReboot.ReadLine.InterruptionResponsiveness = 64;
+            ReadLineReboot.ReadLine.HistoryEnabled = true;
+            ReadLineReboot.ReadLine.CtrlCEnabled = true;
         }
 
         public static async Task Capture(Dialog capturing)
         {
-            while(!tryCapture(capturing))
+            while(!TryCapture(capturing))
             {
                 await CaptureAvailible.WaitAsync();
                 CaptureAvailible.Release();
             }
         }
 
-        public static bool tryCapture(Dialog capturing)
+        public static bool TryCapture(Dialog capturing)
         {
             lock(_capture)
             {
-                if (currentOwner == null)
+                if (CurrentOwner == null)
                 {
-                    currentOwner = capturing;
+                    CurrentOwner = capturing;
                     CaptureAvailible.Wait();
                     return true;
                 }
-                else if (capturing.Priority > currentOwner.Priority)
+                else if (capturing.Priority > CurrentOwner.Priority)
                 {
-                    currentOwner.OnCaptureLost();
-                    currentOwner = capturing;
+                    CurrentOwner.OnCaptureLost();
+                    CurrentOwner = capturing;
                     Console.Clear();
                     return true;
                 }
@@ -62,13 +62,13 @@ namespace TelegramShellClient
             }
         }
 
-        public static bool tryFree(Dialog supposedOwner)
+        public static bool TryFree(Dialog supposedOwner)
         {
             lock (_capture)
             {
-                if (supposedOwner.Equals(currentOwner))
+                if (supposedOwner.Equals(CurrentOwner))
                 {
-                    currentOwner = null;
+                    CurrentOwner = null;
                     CaptureAvailible.Release();
                     return true;
                 }
@@ -79,13 +79,13 @@ namespace TelegramShellClient
             }
         }
 
-        public static bool tryWriteLine(Dialog supposedOwner, in string line)
+        public static bool TryWriteLine(Dialog supposedOwner, in string line)
         {
             lock (_capture)
             {
-                if (supposedOwner.Equals(currentOwner))
+                if (supposedOwner.Equals(CurrentOwner))
                 {
-                    writeLine(line);
+                    WriteLine(line);
                     return true;
                 }
                 else
@@ -100,9 +100,9 @@ namespace TelegramShellClient
             lock (_capture)
             {
 
-                if (supposedOwner.Equals(currentOwner))
+                if (supposedOwner.Equals(CurrentOwner))
                 {
-                    line = readLine();
+                    line = ReadLine(prompt, default_text);
                     return true;
                 }
                 else
@@ -116,28 +116,28 @@ namespace TelegramShellClient
         public delegate T consoleInteraction<T>();
         public delegate void consoleInteraction();
 
-        public static bool tryInteract<T>(Dialog supposedOwner, out T? result, consoleInteraction<T> interaction)
+        public static bool TryInteract<T>(Dialog supposedOwner, out T? result, consoleInteraction<T> interaction)
         {
             lock (_console)
             {
-                if (supposedOwner.Equals(currentOwner))
+                if (supposedOwner.Equals(CurrentOwner))
                 {
                     result = interaction();
                     return true;
                 }
                 else
                 {
-                    result = default(T);
+                    result = default;
                     return false;
                 }
             }
         }
 
-        public static bool tryInteract(Dialog supposedOwner, consoleInteraction interaction)
+        public static bool TryInteract(Dialog supposedOwner, consoleInteraction interaction)
         {
             lock (_console)
             {
-                if (supposedOwner.Equals(currentOwner))
+                if (supposedOwner.Equals(CurrentOwner))
                 {
                     interaction();
                     return true;
@@ -149,15 +149,15 @@ namespace TelegramShellClient
             }
         }
 
-        private static string? readLine(in string prompt = "", in string default_text = "")
+        private static string? ReadLine(in string prompt = "", in string default_text = "")
         {
             lock(_console)
             {
-                return ReadLine.Read(prompt, default_text);
+                return ReadLineReboot.ReadLine.Read(prompt, default_text);
             }
         }
 
-        private static void writeLine(in string line)
+        private static void WriteLine(in string line)
         {
             lock (_console)
             {
