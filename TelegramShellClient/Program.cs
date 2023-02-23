@@ -17,24 +17,36 @@ namespace TelegramShellClient
         private const string API_HASH = "";
         private const string version = "0.1";
         private static TdClient _client = new TdClient();
-        private static Authorization _authorization = Authorization.getInstance(_client);
+        private static Authorization _authorization = Authorization.GetInstance
+            (
+                SetParametrsAsync,
+                delegate (string email)
+                { return _client.ExecuteAsync<Ok>(new SetAuthenticationEmailAddress() { EmailAddress = email }); },
+                delegate ()
+                { return _client.ExecuteAsync<Ok>(new RequestQrCodeAuthentication()); },
+                delegate (string phone, PhoneNumberAuthenticationSettings settings)
+                { return _client.ExecuteAsync<Ok>(new SetAuthenticationPhoneNumber() { PhoneNumber = phone, Settings = settings }); },
+                delegate (string code)
+                { return _client.ExecuteAsync<Ok>(new CheckAuthenticationCode() { Code = code }); },
+                delegate ()
+                { return _client.ExecuteAsync<Ok>(new ResendAuthenticationCode()); },
+                delegate (EmailAddressAuthentication.EmailAddressAuthenticationCode code)
+                { return _client.ExecuteAsync<Ok>(new CheckAuthenticationEmailCode() { Code = code }); },
+                delegate (string password)
+                { return _client.ExecuteAsync<Ok>(new CheckAuthenticationPassword() { Password = password }); }
+            );
 
         static Application()
         {
             _client.Bindings.SetLogVerbosityLevel(0);
             _client.Bindings.SetLogFilePath(LogFile);
             _client.SetLogStreamAsync(null);
-            var d = new newAuthorization(0, executeAsync<Ok>, executeAsync<Ok>);
         }
 
-        static private async Task<TResult> executeAsync<TResult>(Function<TResult> function) where TResult : TdApi.Object
-        {
-            return await _client.ExecuteAsync<TResult>(function);
-        }
 
-        public static async Task SetParametrsAsync()
+        private static Task<Ok> SetParametrsAsync()
         {
-            await _client.SetTdlibParametersAsync(false, DataDir, DataDir, null, true, true, true, true, APP_ID, API_HASH,
+            return _client.SetTdlibParametersAsync(false, DataDir, DataDir, null, true, true, true, true, APP_ID, API_HASH,
                 "en", Environment.MachineName, Environment.OSVersion.VersionString, version, true, false);
         }
 
