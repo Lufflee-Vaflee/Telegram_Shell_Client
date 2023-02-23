@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using ReadLineReboot;
-using ReadLineReboot.Abstractions;
+﻿using ReadLineReboot;
 using static TelegramShellClient.DialogMediator;
 
 namespace TelegramShellClient
@@ -13,60 +7,72 @@ namespace TelegramShellClient
     {
         public Dialog(int priority)
         {
-            _priority = priority;
+            Priority = priority;
         }
 
         List<string>? cache = null;
 
-        public int _priority { get; private set; }
+        public int Priority { get; private set; }
 
-        public bool isConsoleOwner { get; private set; } = false;
+        public bool IsConsoleOwner { get; private set; } = false;
 
-        public void onCaptureLost()
+        public void OnCaptureLost()
         {
             cache = ReadLine.GetHistory();
-            isConsoleOwner = false;
+            IsConsoleOwner = false;
             ReadLine.InterruptRead();
-            panic();
+            Panic();
         }
 
-        internal abstract void panic();
+        internal abstract void Panic();
 
-        private async Task CaptureConsole()
+        internal async Task CaptureConsole()
         {
-            await DialogMediator.Capture(this);
-            isConsoleOwner = true;
-            ReadLine.ClearHistory();
-            restoreHistory();
+            if (!IsConsoleOwner)
+            {
+                await DialogMediator.Capture(this);
+                IsConsoleOwner = true;
+                ReadLine.ClearHistory();
+                RestoreHistory();
+            }
         }
 
-        private void restoreHistory()
+        private void RestoreHistory()
         {
             if (cache != null)
             {
                 foreach (string Line in cache)
                 {
-                    tryWrite(Line);
+                    TryWrite(Line);
                 }
             }
         }
 
-        private bool FreeConsole()
+        internal bool FreeConsole()
         {
-            isConsoleOwner = false;
-            return DialogMediator.tryFree(this);
+            IsConsoleOwner = false;
+            cache?.Clear();
+            return tryFree(this);
         }
 
-        private bool tryWrite(in string Line)
+        internal bool TryWrite(in string Line)
         {
-            return DialogMediator.tryWriteLine(this, Line);
+            return tryWriteLine(this, Line);
         }
 
-        private bool tryRead(out string? line, in string prompt = "", in string default_text = "")
+        internal async Task Write(string line)
+        {
+            while(!TryWrite(line))
+            {
+                await CaptureConsole();
+            }
+        }
+
+        internal bool TryRead(out string? line, in string prompt = "", in string default_text = "")
         {
             try
             {
-                return DialogMediator.tryReadLine(this, out line, prompt, default_text);
+                return TryReadLine(this, out line, prompt, default_text);
             }
             catch
             {
@@ -75,14 +81,44 @@ namespace TelegramShellClient
             }
         }
 
-        public bool tryInteract<T>(out T? result, consoleInteraction<T> interaction)
+        internal async Task<string> Read(string prompt = "", string default_text = "")
         {
-            return DialogMediator.tryInteract<T>(this, out result, interaction);
+            string? result;
+            while (!TryRead(out result, prompt, default_text))
+            {
+                await CaptureConsole();
+            }
+            result ??= string.Empty;
+
+            return result;
         }
 
-        public bool tryInteract(consoleInteraction interaction)
+        internal bool TryInteract<T>(out T? result, consoleInteraction<T> interaction)
+        {
+            return tryInteract<T>(this, out result, interaction);
+        }
+
+        internal async Task<T?> Interact<T>(consoleInteraction<T> interaction)
+        {
+            T? result;
+            while(!TryInteract<T>(out result, interaction))
+            {
+                await CaptureConsole();
+            }
+            return result;
+        }
+
+        internal bool TryInteract(consoleInteraction interaction)
         {
             return DialogMediator.tryInteract(this, interaction);
+        }
+
+        internal async Task Interact(consoleInteraction interaction)
+        {
+            while (!TryInteract(interaction))
+            {
+                await CaptureConsole();
+            }
         }
     }
 }

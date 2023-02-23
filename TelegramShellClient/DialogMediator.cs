@@ -48,9 +48,9 @@ namespace TelegramShellClient
                     CaptureAvailible.Wait();
                     return true;
                 }
-                else if (capturing._priority > currentOwner._priority)
+                else if (capturing.Priority > currentOwner.Priority)
                 {
-                    currentOwner.onCaptureLost();
+                    currentOwner.OnCaptureLost();
                     currentOwner = capturing;
                     Console.Clear();
                     return true;
@@ -95,7 +95,7 @@ namespace TelegramShellClient
             }
         }
 
-        public static bool tryReadLine(Dialog supposedOwner, out string? line, in string prompt = "", in string default_text = "")
+        public static bool TryReadLine(Dialog supposedOwner, out string? line, in string prompt = "", in string default_text = "")
         {
             lock (_capture)
             {
