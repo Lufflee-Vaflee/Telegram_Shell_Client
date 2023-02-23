@@ -1,235 +1,232 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using TdLib;
 using static TdLib.TdApi;
-using TdLib;
-using TelegramShellClient;
 
 namespace TelegramShellClient
 {
-    internal class Authorization
+    internal class Authorization : Dialog
     {
+        private static readonly Authorization? instance = null;
 
-        private static Authorization? instance = null;
-        private readonly TdClient? _client = null;
-        private readonly Updater updater;
+        private readonly SetParameters         setParameters;
+        private readonly SetEmailAdressAsync setEmailAdressAsync;
+        private readonly RequestQrCodeAsync    requestQrCodeAsync;
+        private readonly SetPhoneNumberAsync   setPhoneNumberAsync;
+        private readonly CheckCodeAsync        checkCodeAsync;
+        private readonly ResendCodeAsync       resendCodeAsync;
+        private readonly CheckEmailCode        checkEmailCodeAsync;
+        private readonly CheckPasswordAsync    checkPasswordAsync;
 
-        private Authorization(TdClient client)
-        {
-            isLoggingOut = false;
-            isAuthorized = false;
-            _client = client;
-            updater = Updater.getInstance(client); 
-            if (!updater.TryRegistrateHandler(StateUpdateHandler, new Update.UpdateAuthorizationState()))
-            {
-                throw new UnauthorizedAccessException("Error registrating update handler. UpdateAuthorization state already captured. Cant initialize Authorization class");
-            }
-            TdApi.RequestAuthenticationPasswordRecovery
-                _client.exe
-        }
 
-        public static Authorization getInstance(TdClient client)
-        {
-            return instance == null ? new Authorization(client) : instance;
-        }
+        public delegate Task<Ok> SetParameters();
+        public delegate Task<Ok> SetEmailAdressAsync(string email);
+        public delegate Task<Ok> RequestQrCodeAsync();
+        public delegate Task<Ok> SetPhoneNumberAsync(string phone, PhoneNumberAuthenticationSettings settings);
+        public delegate Task<Ok> CheckCodeAsync(string code);
+        public delegate Task<Ok> ResendCodeAsync();
+        public delegate Task<Ok> CheckEmailCode(EmailAddressAuthentication.EmailAddressAuthenticationCode code);
+        public delegate Task<Ok> CheckPasswordAsync(string password);
 
-        private AuthorizationState? _old_state = null;
-        public bool isAuthorized { get; private set; }
-        public bool isLoggingOut { get; private set; }
+        public bool IsAuthorized { get; private set; }
+        public bool IsLoggingOut { get; private set; }
 
         private bool resend_flag = false;
 
-        private async Task StateUpdateHandler(Update update)
-        {
-            AuthorizationState? new_state = ((Update.UpdateAuthorizationState)update).AuthorizationState;
 
-            isAuthorized = false;
-            isLoggingOut = false;
+        private readonly Updatable<AuthorizationState, Update.UpdateAuthorizationState> state = new( 
+            delegate (Update.UpdateAuthorizationState update) 
+            { 
+                return update.AuthorizationState; 
+            });
+
+        private Authorization(SetParameters setParameters, SetEmailAdressAsync setEmailAdressAsync, RequestQrCodeAsync requestQrCodeAsync, SetPhoneNumberAsync setPhoneNumberAsync, 
+            CheckCodeAsync checkCodeAsync, ResendCodeAsync resendCodeAsync, CheckEmailCode checkEmailCodeAsync, CheckPasswordAsync checkPasswordAsync) : base(10)
+        {
+            this.setParameters = setParameters;
+            this.setEmailAdressAsync = setEmailAdressAsync;
+            this.requestQrCodeAsync = requestQrCodeAsync;
+            this.checkCodeAsync = checkCodeAsync;
+            this.resendCodeAsync = resendCodeAsync;
+            this.setPhoneNumberAsync = setPhoneNumberAsync;
+            this.checkEmailCodeAsync = checkEmailCodeAsync;
+            this.checkPasswordAsync = checkPasswordAsync;
+
+            state.Notify += OnStateUpdated;
+        }
+
+        public static Authorization GetInstance(SetParameters setParameters, SetEmailAdressAsync setEmailAdressAsync, RequestQrCodeAsync requestQrCodeAsync, SetPhoneNumberAsync setPhoneNumberAsync,
+            CheckCodeAsync checkCodeAsync, ResendCodeAsync resendCodeAsync, CheckEmailCode checkEmailCodeAsync, CheckPasswordAsync checkPasswordAsync)
+        {
+            return instance ?? new Authorization(setParameters, setEmailAdressAsync, requestQrCodeAsync, setPhoneNumberAsync,
+                checkCodeAsync, resendCodeAsync, checkEmailCodeAsync, checkPasswordAsync);
+        }
+
+        private async void OnStateUpdated(AuthorizationState? old_state, AuthorizationState new_state)
+        {
+            await CaptureConsole();
+
+            IsAuthorized = false;
+            IsLoggingOut = false;
 
             switch (new_state)
             {
                 case AuthorizationState.AuthorizationStateWaitTdlibParameters:
-                    await Application.SetParametrsAsync();
+                    await setParameters();
                     break;
                 case AuthorizationState.AuthorizationStateWaitCode:
-                    await EnterCodeAsync(new_state);
+                    await EnterCodeAsync(old_state, new_state);
                     break;
                 case AuthorizationState.AuthorizationStateWaitEmailAddress:                                         //add googleid/appleid ??
-                    await EnterAuthentificationInfoAsync(new_state, "email", async delegate ()
+                    await EnterAuthentificationInfoAsync(old_state, new_state, "email", async delegate ()
                     {
-                        string? email = Console.ReadLine();
-                        return await _client.SetAuthenticationEmailAddressAsync(email);
+                        string? email = await Read();
+                        return await setEmailAdressAsync(email);
                     });
                     break;
                 case AuthorizationState.AuthorizationStateWaitPhoneNumber:
                     Console.WriteLine("Authorize via QR Code?[Y]");
                     if (Console.ReadLine() == "Y")
                     {
-                        await _client.RequestQrCodeAuthenticationAsync();
+                        await requestQrCodeAsync();
                         break;
                     }
-                    await EnterAuthentificationInfoAsync(new_state, "phone number", async delegate ()
+                    await EnterAuthentificationInfoAsync(old_state, new_state, "phone number", async delegate ()
                     {
-                        string? phone_number = Console.ReadLine();
-                        PhoneNumberAuthenticationSettings settings = new PhoneNumberAuthenticationSettings();
-                        settings.IsCurrentPhoneNumber = false;
-                        settings.AllowFlashCall = false;
-                        settings.AllowSmsRetrieverApi = false;
-                        return await _client.SetAuthenticationPhoneNumberAsync(phone_number, settings);
+                        string phone_number = await Read();
+                        PhoneNumberAuthenticationSettings settings = new()
+                        {
+                            IsCurrentPhoneNumber = false,
+                            AllowFlashCall = false,
+                            AllowSmsRetrieverApi = false
+                        };
+                        return await setPhoneNumberAsync(phone_number, settings);
                     });
                     break;
                 case AuthorizationState.AuthorizationStateWaitPassword:
-                    await EnterAuthentificationInfoAsync(new_state, "password", async delegate ()
+                    await EnterAuthentificationInfoAsync(old_state, new_state, "password", async delegate ()
                     {
                         string hint = ((AuthorizationState.AuthorizationStateWaitPassword)new_state).PasswordHint;
                         if (hint.Length != 0)
                         {
-                            Console.WriteLine($"Password hint: {hint}");
+                            await Write($"Password hint: {hint}");
                         }
-                        string? password = Console.ReadLine();
-                        return await _client.CheckAuthenticationPasswordAsync(password);
+                        string password = await Read();
+                        return await checkPasswordAsync(password);
                     });
                     break;
                 case AuthorizationState.AuthorizationStateWaitEmailCode:                                            //add googleid/appleid ??
-                    await EnterAuthentificationInfoAsync(new_state, "email code", async delegate ()
+                    await EnterAuthentificationInfoAsync(old_state, new_state, "email code", async delegate ()
                     {
                         var pattern = ((AuthorizationState.AuthorizationStateWaitEmailCode)new_state).CodeInfo.EmailAddressPattern;
-                        Console.WriteLine(pattern);
-
-                        DateTime valid_until = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc);
+                        await Write(pattern);
+                        DateTime valid_until = new(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc);
                         valid_until = valid_until.AddSeconds(((AuthorizationState.AuthorizationStateWaitEmailCode)new_state).NextPhoneNumberAuthorizationDate).ToLocalTime();
                         TimeSpan valid_for = valid_until.Subtract(DateTime.UtcNow);
-                        Console.WriteLine($"Email will be valid for the next {valid_for.Seconds} seconds");
+                        await Write($"Email will be valid for the next {valid_for.Seconds} seconds");
 
-                        var email_code = new EmailAddressAuthentication.EmailAddressAuthenticationCode();
-                        email_code.Code = Console.ReadLine();
-                        return await _client.CheckAuthenticationEmailCodeAsync(email_code);
+                        var email_code = new EmailAddressAuthentication.EmailAddressAuthenticationCode
+                        {
+                            Code = await Read()
+                        };
+                        return await checkEmailCodeAsync(email_code);
 
                     });
                     break;
                 case AuthorizationState.AuthorizationStateWaitOtherDeviceConfirmation:
-                    Console.WriteLine("Open Telegram on your phone -> go to Settings -> Link Desktop Device -> Scan this QR:");
-                    Console.WriteLine(((AuthorizationState.AuthorizationStateWaitOtherDeviceConfirmation)new_state).Link);
+                    await Write("Open Telegram on your phone -> go to Settings -> Link Desktop Device -> Scan this QR:");
+                    await Write(((AuthorizationState.AuthorizationStateWaitOtherDeviceConfirmation)new_state).Link);
                     break;
                 case AuthorizationState.AuthorizationStateWaitRegistration:
-                    Console.WriteLine("Phone number not registered. Use antoher client to do so.");
+                    await Write("Phone number not registered. Use antoher client to do so.");
                     throw new NotImplementedException("User not registred");
                 case AuthorizationState.AuthorizationStateReady:
-                    isAuthorized = true;
-                    Console.WriteLine("Authorization successfully completed.");
+                    IsAuthorized = true;
+                    await Write("Authorization successfully completed.");
+                    FreeConsole();
                     break;
                 case AuthorizationState.AuthorizationStateLoggingOut:
-                    isLoggingOut = true;
-                    Console.WriteLine("Logging Out...");
+                    IsLoggingOut = true;
+                    await Write("Logging Out...");
                     break;
                 case AuthorizationState.AuthorizationStateClosing:
-                    isLoggingOut = true;
-                    Console.WriteLine("Closing the application(wait for saving all cats images).");
+                    IsLoggingOut = true;
+                    await Write("Closing the application(wait for saving all cats images).");
                     break;
                 case AuthorizationState.AuthorizationStateClosed:
-                    Console.WriteLine("Closed");
+                    FreeConsole();
+                    await Write("Closed");
                     break;
             }
 
-            _old_state = new_state;
             return;
         }
 
         private delegate Task<Ok> SendAuthentificationInfoAsync();
-
-        private async Task<Ok> EnterAuthentificationInfoAsync(AuthorizationState new_state, string state_name, SendAuthentificationInfoAsync send)
+        private async Task<Ok> EnterAuthentificationInfoAsync(AuthorizationState? old_state, AuthorizationState new_state, string state_name, SendAuthentificationInfoAsync send)
         {
-            if (_old_state == new_state)
+            if (old_state == new_state)
             {
-                Console.WriteLine($"Incorrect {state_name}. Enter {state_name} again:");
+                await Write($"Incorrect {state_name}. Enter {state_name} again:");
             }
             else
             {
-                Console.WriteLine($"Enter {state_name}:");
+                await Write($"Enter {state_name}:");
             }
 
             return await send();
         }
 
-        private async Task EnterCodeAsync(AuthorizationState new_state)
+        private async Task EnterCodeAsync(AuthorizationState? old_state, AuthorizationState new_state)
         {
             string? code;
             AuthenticationCodeInfo info = ((AuthorizationState.AuthorizationStateWaitCode)new_state).CodeInfo;
             AuthenticationCodeType codeType = info.Type;
 
-            if (_old_state != new_state || resend_flag)
+            if (old_state != new_state || resend_flag)
             {
 
                 switch (codeType)
                 {
                     case AuthenticationCodeType.AuthenticationCodeTypeCall:
-                        Console.WriteLine($"We have send you code via phone call to {info.PhoneNumber}.");
+                        await Write($"We have send you code via phone call to {info.PhoneNumber}.");
                         break;
                     case AuthenticationCodeType.AuthenticationCodeTypeMissedCall:
-                        Console.WriteLine($"We have send you code by missed call to {info.PhoneNumber}. Enter last ? digits:");     //how much digits needed?
+                        await Write($"We have send you code by missed call to {info.PhoneNumber}. Enter last ? digits:");               //how much digits needed?
                         break;
                     case AuthenticationCodeType.AuthenticationCodeTypeFragment:
-                        Console.WriteLine($"We have send you code to your NFT phone number. Check https://fragment.com:");
+                        await Write($"We have send you code to your NFT phone number. Check https://fragment.com:");
                         break;
                     case AuthenticationCodeType.AuthenticationCodeTypeSms:
-                        Console.WriteLine($"We have send you code by sms to {info.PhoneNumber}:");
+                        await Write($"We have send you code by sms to {info.PhoneNumber}:");
                         break;
                     case AuthenticationCodeType.AuthenticationCodeTypeTelegramMessage:
-                        Console.WriteLine($"We have send you code via telegram message. Check your any other logged in device:");
+                        await Write($"We have send you code via telegram message. Check your any other logged in device:");
                         break;
                     case AuthenticationCodeType.AuthenticationCodeTypeFlashCall:
                         throw new InvalidOperationException("Flash call code authentification type.");
                 }
 
-                Console.WriteLine($"Code will be valid for the next {info.Timeout} seconds | ({DateTime.Now.ToString()})");
-                Console.WriteLine("Enter authentification code or empty string to to get a new one: ");
+                await Write($"Code will be valid for the next {info.Timeout} seconds | ({DateTime.Now})");
+                await Write("Enter authentification code or empty string to to get a new one: ");
             }
             else
             {
-                Console.WriteLine("Incorrect code. Try it again or enter empty string to to get a new one: ");
+                await Write("Incorrect code. Try it again or enter empty string to to get a new one: ");
             }
 
             code = Console.ReadLine();
             if (code == null || code.Length == 0)
             {
-                await _client.ResendAuthenticationCodeAsync();
+                await resendCodeAsync();
                 resend_flag = true;
             }
             else
             {
-                await _client.CheckAuthenticationCodeAsync(code);
+                await checkCodeAsync(code);
                 resend_flag = false;
             }
         }
 
-        public async Task LogOutAsync()
-        {
-            await _client.LogOutAsync();
-        }
-    }
-
-    internal class newAuthorization : Dialog
-    {
-        private newAuthorization? instance = null;
-
-        resendCode _resend;
-        checkCode _check;
-
-
-        public delegate Task<Ok> resendCode(TdApi.ResendAuthenticationCode code);
-        public delegate Task<Ok> checkCode(TdApi.CheckAuthenticationEmailCode code);
-
-        public newAuthorization(int priority, resendCode resend, checkCode check) : base(priority)
-        {
-            _resend = resend;
-            _check = check;
-            check(new TdApi.ResendAuthenticationCode());
-            
-        }
-
-        internal override void panic()
+        internal override void Panic()
         {
 
         }

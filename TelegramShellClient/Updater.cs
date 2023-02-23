@@ -14,7 +14,7 @@ namespace TelegramShellClient
     {
         internal static class Updater
         {
-            private static readonly Dictionary<string, Handler> handlers = new Dictionary<string, Handler>();
+            private static readonly Dictionary<string, Handler> handlers = new();
 
             static Updater()
             {
@@ -29,8 +29,7 @@ namespace TelegramShellClient
                     return;
                 }
 
-                Handler? handler;
-                if (handlers.TryGetValue(update.DataType, out handler))
+                if (handlers.TryGetValue(update.DataType, out Handler? handler))
                 {
                     handler(update);
                 }
@@ -42,11 +41,11 @@ namespace TelegramShellClient
 
             public delegate void Handler(TdApi.Update update);
 
-            static public bool TryRegistrateHandler(Handler handler, TdApi.Update type)
+            static public bool TryRegistrateHandler<Type>(Handler handler) where Type : TdApi.Update
             {
                 try
                 {
-                    handlers.Add(type.DataType, handler);
+                    handlers.Add(default(Type).DataType, handler);
                     return true;
                 }
                 catch

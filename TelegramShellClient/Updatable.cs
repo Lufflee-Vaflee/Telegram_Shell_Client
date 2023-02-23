@@ -7,11 +7,11 @@ using TdLib;
 
 namespace TelegramShellClient
 {
-    internal class Updatable<State>
+    internal class Updatable<Type, Update> where Update : TdApi.Update
     {
 
-        private State? _state;
-        public State? state
+        private Type? _state;
+        public Type? State
         {
             get
             {
@@ -27,35 +27,35 @@ namespace TelegramShellClient
         }
 
 
-        private object updating = new object();
+        private readonly object updating = new();
 
-        public delegate State unpackState(TdApi.Update update);
+        public delegate Type unpackState(Update update);
 
-        private unpackState unpack;
+        private readonly unpackState unpack;
 
-        public Updatable(TdApi.Update update, unpackState unpack)
+        public Updatable(unpackState unpack)
         {
             this.unpack = unpack;
-            if(!Application.Updater.TryRegistrateHandler(UpdateHandler, update))
+            if(!Application.Updater.TryRegistrateHandler<Update>(UpdateHandler))
             {
-                throw new UnauthorizedAccessException($"Error registrating update handler. {update.DataType} is already captured");
+                throw new UnauthorizedAccessException($"Error registrating update handler. {default(Update).DataType} is already captured");
             }
         }
 
-        delegate void Updated(State? oldState, State newState);
+        public delegate void Updated(Type? oldState, Type newState);
 
-        event Updated? Notify;
+        public event Updated? Notify;
 
         private void UpdateHandler(TdApi.Update update)
         {
-            State? old_state;
+            Type? old_state;
             lock (updating)
             {
                 old_state = _state;
-                state = unpack(update);
+                State = unpack((Update)update);
             }
 
-            Notify?.BeginInvoke(old_state, state, null, "hello there");
+            Notify?.BeginInvoke(old_state, State, null, "state Updated");
         }
     }
 }
